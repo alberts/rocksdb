@@ -234,6 +234,10 @@ extern void rocksdb_options_set_source_compaction_factor(rocksdb_options_t*, int
 extern void rocksdb_options_prepare_for_bulk_load(rocksdb_options_t*);
 extern void rocksdb_options_set_memtable_vector_rep(rocksdb_options_t*);
 
+extern void rocksdb_options_enable_statistics(rocksdb_options_t*);
+
+extern void rocksdb_options_set_max_bytes_for_level_base(rocksdb_options_t* opt, uint64_t n);
+extern void rocksdb_options_set_stats_dump_period_sec(rocksdb_options_t* opt, unsigned int sec);
 
 enum {
   rocksdb_no_compression = 0,

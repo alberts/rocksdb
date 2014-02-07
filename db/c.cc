@@ -22,6 +22,7 @@
 #include "rocksdb/write_batch.h"
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/universal_compaction.h"
+#include "rocksdb/statistics.h"
 
 using rocksdb::Cache;
 using rocksdb::Comparator;
@@ -613,6 +614,14 @@ void rocksdb_options_set_compaction_style(rocksdb_options_t *opt, int style) {
 
 void rocksdb_options_set_universal_compaction_options(rocksdb_options_t *opt, rocksdb_universal_compaction_options_t *uco) {
   opt->rep.compaction_options_universal = *(uco->rep);
+}
+
+void rocksdb_options_enable_statistics(rocksdb_options_t* opt) {
+  opt->rep.statistics = rocksdb::CreateDBStatistics();
+}
+
+void rocksdb_options_set_stats_dump_period_sec(rocksdb_options_t* opt, unsigned int sec) {
+  opt->rep.stats_dump_period_sec = sec;
 }
 
 /*
