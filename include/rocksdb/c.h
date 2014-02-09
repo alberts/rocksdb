@@ -239,6 +239,8 @@ extern void rocksdb_options_enable_statistics(rocksdb_options_t*);
 extern void rocksdb_options_set_max_bytes_for_level_base(rocksdb_options_t* opt, uint64_t n);
 extern void rocksdb_options_set_stats_dump_period_sec(rocksdb_options_t* opt, unsigned int sec);
 
+extern void rocksdb_options_set_min_level_to_compress(rocksdb_options_t* opt, int level);
+
 enum {
   rocksdb_no_compression = 0,
   rocksdb_snappy_compression = 1,

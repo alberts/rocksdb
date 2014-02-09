@@ -848,4 +848,17 @@ void rocksdb_universal_compaction_options_destroy(
   delete uco;
 }
 
+void rocksdb_options_set_min_level_to_compress(rocksdb_options_t* opt, int level) {
+  if (level >= 0) {
+    assert(level <= opt->rep.num_levels);
+    opt->rep.compression_per_level.resize(opt->rep.num_levels);
+    for (int i = 0; i < level; i++) {
+      opt->rep.compression_per_level[i] = rocksdb::kNoCompression;
+    }
+    for (int i = level; i < opt->rep.num_levels; i++) {
+      opt->rep.compression_per_level[i] = opt->rep.compression;
+    }
+  }
+}
+
 }  // end extern "C"
