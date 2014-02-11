@@ -299,6 +299,9 @@ extern void rocksdb_readoptions_set_fill_cache(
 extern void rocksdb_readoptions_set_snapshot(
     rocksdb_readoptions_t*,
     const rocksdb_snapshot_t*);
+extern void rocksdb_readoptions_set_tailing(
+    rocksdb_readoptions_t*,
+    unsigned char);
 
 /* Write options */
 
