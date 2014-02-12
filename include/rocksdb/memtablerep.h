@@ -21,7 +21,7 @@
 // types built in:
 //  - SkipListRep: This is the default; it is backed by a skip list.
 //  - HashSkipListRep: The memtable rep that is best used for keys that are
-//  structured like "prefix:suffix" where iteration withing a prefix is
+//  structured like "prefix:suffix" where iteration within a prefix is
 //  common and iteration across different prefixes is rare. It is backed by
 //  a hash map where each bucket is a skip list.
 //  - VectorRep: This is backed by an unordered std::vector. On iteration, the
@@ -36,10 +36,12 @@
 #pragma once
 
 #include <memory>
+#include <stdint.h>
 
 namespace rocksdb {
 
 class Arena;
+class LookupKey;
 class Slice;
 class SliceTransform;
 
@@ -73,6 +75,20 @@ class MemTableRep {
   // nothing.
   virtual void MarkReadOnly() { }
 
+  // Look up key from the mem table, since the first key in the mem table whose
+  // user_key matches the one given k, call the function callback_func(), with
+  // callback_args directly forwarded as the first parameter, and the mem table
+  // key as the second parameter. If the return value is false, then terminates.
+  // Otherwise, go through the next key.
+  // It's safe for Get() to terminate after having finished all the potential
+  // key for the k.user_key(), or not.
+  //
+  // Default:
+  // Get() function with a default value of dynamically construct an iterator,
+  // seek and call the call back function.
+  virtual void Get(const LookupKey& k, void* callback_args,
+                   bool (*callback_func)(void* arg, const char* entry));
+
   // Report an approximation of how much memory has been used other than memory
   // that was allocated through the arena.
   virtual size_t ApproximateMemoryUsage() = 0;
@@ -85,7 +101,7 @@ class MemTableRep {
     // Initialize an iterator over the specified collection.
     // The returned iterator is not valid.
     // explicit Iterator(const MemTableRep* collection);
-    virtual ~Iterator() { };
+    virtual ~Iterator() {}
 
     // Returns true iff the iterator is positioned at a valid node.
     virtual bool Valid() const = 0;
@@ -143,7 +159,7 @@ class MemTableRep {
 // new MemTableRep objects
 class MemTableRepFactory {
  public:
-  virtual ~MemTableRepFactory() { };
+  virtual ~MemTableRepFactory() {}
   virtual MemTableRep* CreateMemTableRep(MemTableRep::KeyComparator&,
                                          Arena*) = 0;
   virtual const char* Name() const = 0;
@@ -159,7 +175,8 @@ class MemTableRepFactory {
 //     bytes reserved for usage.
 class VectorRepFactory : public MemTableRepFactory {
   const size_t count_;
-public:
+
+ public:
   explicit VectorRepFactory(size_t count = 0) : count_(count) { }
   virtual MemTableRep* CreateMemTableRep(MemTableRep::KeyComparator&,
                                          Arena*) override;
@@ -170,9 +187,9 @@ public:
 
 // This uses a skip list to store keys. It is the default.
 class SkipListFactory : public MemTableRepFactory {
-public:
- virtual MemTableRep* CreateMemTableRep(MemTableRep::KeyComparator&,
-                                        Arena*) override;
+ public:
+  virtual MemTableRep* CreateMemTableRep(MemTableRep::KeyComparator&,
+                                         Arena*) override;
   virtual const char* Name() const override {
     return "SkipListFactory";
   }
@@ -196,4 +213,4 @@ extern MemTableRepFactory* NewHashSkipListRepFactory(
 extern MemTableRepFactory* NewHashLinkListRepFactory(
     const SliceTransform* transform, size_t bucket_count = 50000);
 
-}
+}  // namespace rocksdb

@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "db/builder.h"
 #include "rocksdb/comparator.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
@@ -102,20 +103,25 @@ bool NotifyCollectTableCollectorsOnFinish(
     PropertyBlockBuilder* builder);
 
 // Read the properties from the table.
-Status ReadProperties(
-    const Slice& handle_value,
-    RandomAccessFile* file,
-    Env* env,
-    Logger* logger,
-    TableProperties* table_properties);
+// @returns a status to indicate if the operation succeeded. On success,
+//          *table_properties will point to a heap-allocated TableProperties
+//          object, otherwise value of `table_properties` will not be modified.
+Status ReadProperties(const Slice& handle_value, RandomAccessFile* file,
+                      Env* env, Logger* logger,
+                      TableProperties** table_properties);
 
 // Directly read the properties from the properties block of a plain table.
-Status ReadTableProperties(
-    RandomAccessFile* file,
-    uint64_t file_size,
-    uint64_t table_magic_number,
-    Env* env,
-    Logger* info_log,
-    TableProperties* properties);
+// @returns a status to indicate if the operation succeeded. On success,
+//          *table_properties will point to a heap-allocated TableProperties
+//          object, otherwise value of `table_properties` will not be modified.
+Status ReadTableProperties(RandomAccessFile* file, uint64_t file_size,
+                           uint64_t table_magic_number, Env* env,
+                           Logger* info_log, TableProperties** properties);
 
+// Read the magic number of the specified file directly.  The magic number
+// of a valid sst table the last 8-byte of the file.
+Status ReadTableMagicNumber(const std::string& file_path,
+                            const Options& options,
+                            const EnvOptions& env_options,
+                            uint64_t* table_magic_number);
 }  // namespace rocksdb

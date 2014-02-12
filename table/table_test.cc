@@ -6,6 +6,9 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
+
+#include <inttypes.h>
+#include <stdio.h>
 #include <algorithm>
 #include <map>
 #include <string>
@@ -25,6 +28,7 @@
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/memtablerep.h"
 #include "table/block.h"
+#include "table/meta_blocks.h"
 #include "table/block_based_table_builder.h"
 #include "table/block_based_table_factory.h"
 #include "table/block_based_table_reader.h"
@@ -483,30 +487,62 @@ class DBConstructor: public Constructor {
 };
 
 static bool SnappyCompressionSupported() {
+#ifdef SNAPPY
   std::string out;
   Slice in = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   return port::Snappy_Compress(Options().compression_opts,
                                in.data(), in.size(),
                                &out);
+#else
+  return false;
+#endif
 }
 
 static bool ZlibCompressionSupported() {
+#ifdef ZLIB
   std::string out;
   Slice in = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   return port::Zlib_Compress(Options().compression_opts,
                              in.data(), in.size(),
                              &out);
+#else
+  return false;
+#endif
 }
 
-#ifdef BZIP2
 static bool BZip2CompressionSupported() {
+#ifdef BZIP2
   std::string out;
   Slice in = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   return port::BZip2_Compress(Options().compression_opts,
                               in.data(), in.size(),
                               &out);
-}
+#else
+  return false;
 #endif
+}
+
+static bool LZ4CompressionSupported() {
+#ifdef LZ4
+  std::string out;
+  Slice in = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  return port::LZ4_Compress(Options().compression_opts, in.data(), in.size(),
+                            &out);
+#else
+  return false;
+#endif
+}
+
+static bool LZ4HCCompressionSupported() {
+#ifdef LZ4
+  std::string out;
+  Slice in = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  return port::LZ4HC_Compress(Options().compression_opts, in.data(), in.size(),
+                              &out);
+#else
+  return false;
+#endif
+}
 
 enum TestType {
   BLOCK_BASED_TABLE_TEST,
@@ -534,24 +570,23 @@ static std::vector<TestArgs> GenerateArgList() {
   std::vector<int> restart_intervals = {16, 1, 1024};
 
   // Only add compression if it is supported
-  std::vector<CompressionType> compression_types = {kNoCompression};
-#ifdef SNAPPY
+  std::vector<CompressionType> compression_types;
+  compression_types.push_back(kNoCompression);
   if (SnappyCompressionSupported()) {
     compression_types.push_back(kSnappyCompression);
   }
-#endif
-
-#ifdef ZLIB
   if (ZlibCompressionSupported()) {
     compression_types.push_back(kZlibCompression);
   }
-#endif
-
-#ifdef BZIP2
   if (BZip2CompressionSupported()) {
     compression_types.push_back(kBZip2Compression);
   }
-#endif
+  if (LZ4CompressionSupported()) {
+    compression_types.push_back(kLZ4Compression);
+  }
+  if (LZ4HCCompressionSupported()) {
+    compression_types.push_back(kLZ4HCCompression);
+  }
 
   for (auto test_type : test_types) {
     for (auto reverse_compare : reverse_compare_types) {
@@ -928,7 +963,7 @@ TEST(BlockBasedTableTest, BasicBlockBasedTableProperties) {
   c.Finish(options, GetPlainInternalComparator(options.comparator), &keys,
            &kvmap);
 
-  auto& props = c.table_reader()->GetTableProperties();
+  auto& props = *c.table_reader()->GetTableProperties();
   ASSERT_EQ(kvmap.size(), props.num_entries);
 
   auto raw_key_size = kvmap.size() * 2ul;
@@ -945,10 +980,7 @@ TEST(BlockBasedTableTest, BasicBlockBasedTableProperties) {
     block_builder.Add(item.first, item.second);
   }
   Slice content = block_builder.Finish();
-  ASSERT_EQ(
-      content.size() + kBlockTrailerSize,
-      props.data_size
-  );
+  ASSERT_EQ(content.size() + kBlockTrailerSize, props.data_size);
 }
 
 TEST(BlockBasedTableTest, FilterPolicyNameProperties) {
@@ -957,14 +989,12 @@ TEST(BlockBasedTableTest, FilterPolicyNameProperties) {
   std::vector<std::string> keys;
   KVMap kvmap;
   Options options;
-  std::unique_ptr<const FilterPolicy> filter_policy(
-    NewBloomFilterPolicy(10)
-  );
+  std::unique_ptr<const FilterPolicy> filter_policy(NewBloomFilterPolicy(10));
   options.filter_policy = filter_policy.get();
 
   c.Finish(options, GetPlainInternalComparator(options.comparator), &keys,
            &kvmap);
-  auto& props = c.table_reader()->GetTableProperties();
+  auto& props = *c.table_reader()->GetTableProperties();
   ASSERT_EQ("rocksdb.BuiltinBloomFilter", props.filter_policy_name);
 }
 
@@ -1006,8 +1036,7 @@ TEST(BlockBasedTableTest, IndexSizeStat) {
 
     c.Finish(options, GetPlainInternalComparator(options.comparator), &ks,
              &kvmap);
-    auto index_size =
-      c.table_reader()->GetTableProperties().index_size;
+    auto index_size = c.table_reader()->GetTableProperties()->index_size;
     ASSERT_GT(index_size, last_index_size);
     last_index_size = index_size;
   }
@@ -1031,10 +1060,8 @@ TEST(BlockBasedTableTest, NumBlockStat) {
   KVMap kvmap;
   c.Finish(options, GetPlainInternalComparator(options.comparator), &ks,
            &kvmap);
-  ASSERT_EQ(
-      kvmap.size(),
-      c.table_reader()->GetTableProperties().num_data_blocks
-  );
+  ASSERT_EQ(kvmap.size(),
+            c.table_reader()->GetTableProperties()->num_data_blocks);
 }
 
 class BlockCacheProperties {
@@ -1049,32 +1076,26 @@ class BlockCacheProperties {
   }
 
   // Check if the fetched props matches the expected ones.
-  void AssertEqual(
-      long index_block_cache_miss,
-      long index_block_cache_hit,
-      long data_block_cache_miss,
-      long data_block_cache_hit) const {
+  void AssertEqual(int64_t index_block_cache_miss,
+                   int64_t index_block_cache_hit, int64_t data_block_cache_miss,
+                   int64_t data_block_cache_hit) const {
     ASSERT_EQ(index_block_cache_miss, this->index_block_cache_miss);
     ASSERT_EQ(index_block_cache_hit, this->index_block_cache_hit);
     ASSERT_EQ(data_block_cache_miss, this->data_block_cache_miss);
     ASSERT_EQ(data_block_cache_hit, this->data_block_cache_hit);
-    ASSERT_EQ(
-        index_block_cache_miss + data_block_cache_miss,
-        this->block_cache_miss
-    );
-    ASSERT_EQ(
-        index_block_cache_hit + data_block_cache_hit,
-        this->block_cache_hit
-    );
+    ASSERT_EQ(index_block_cache_miss + data_block_cache_miss,
+              this->block_cache_miss);
+    ASSERT_EQ(index_block_cache_hit + data_block_cache_hit,
+              this->block_cache_hit);
   }
 
  private:
-  long block_cache_miss = 0;
-  long block_cache_hit = 0;
-  long index_block_cache_miss = 0;
-  long index_block_cache_hit = 0;
-  long data_block_cache_miss = 0;
-  long data_block_cache_hit = 0;
+  int64_t block_cache_miss = 0;
+  int64_t block_cache_hit = 0;
+  int64_t index_block_cache_miss = 0;
+  int64_t index_block_cache_hit = 0;
+  int64_t data_block_cache_miss = 0;
+  int64_t data_block_cache_hit = 0;
 };
 
 TEST(BlockBasedTableTest, BlockCacheTest) {
@@ -1104,12 +1125,8 @@ TEST(BlockBasedTableTest, BlockCacheTest) {
   {
     BlockCacheProperties props(options.statistics.get());
     // index will be added to block cache.
-    props.AssertEqual(
-        1,  // index block miss
-        0,
-        0,
-        0
-    );
+    props.AssertEqual(1,  // index block miss
+                      0, 0, 0);
   }
 
   // Only index block will be accessed
@@ -1119,24 +1136,16 @@ TEST(BlockBasedTableTest, BlockCacheTest) {
     // NOTE: to help better highlight the "detla" of each ticker, I use
     // <last_value> + <added_value> to indicate the increment of changed
     // value; other numbers remain the same.
-    props.AssertEqual(
-        1,
-        0 + 1,  // index block hit
-        0,
-        0
-    );
+    props.AssertEqual(1, 0 + 1,  // index block hit
+                      0, 0);
   }
 
   // Only data block will be accessed
   {
     iter->SeekToFirst();
     BlockCacheProperties props(options.statistics.get());
-    props.AssertEqual(
-        1,
-        1,
-        0 + 1,  // data block miss
-        0
-    );
+    props.AssertEqual(1, 1, 0 + 1,  // data block miss
+                      0);
   }
 
   // Data block will be in cache
@@ -1144,12 +1153,8 @@ TEST(BlockBasedTableTest, BlockCacheTest) {
     iter.reset(c.NewIterator());
     iter->SeekToFirst();
     BlockCacheProperties props(options.statistics.get());
-    props.AssertEqual(
-        1,
-        1 + 1,  // index block hit
-        1,
-        0 + 1  // data block hit
-    );
+    props.AssertEqual(1, 1 + 1, /* index block hit */
+                      1, 0 + 1 /* data block hit */);
   }
   // release the iterator so that the block cache can reset correctly.
   iter.reset();
@@ -1175,12 +1180,8 @@ TEST(BlockBasedTableTest, BlockCacheTest) {
   c.Reopen(options);
   {
     BlockCacheProperties props(options.statistics.get());
-    props.AssertEqual(
-        1,  // index block miss
-        0,
-        0,
-        0
-    );
+    props.AssertEqual(1,  // index block miss
+                      0, 0, 0);
   }
 
 
@@ -1190,12 +1191,9 @@ TEST(BlockBasedTableTest, BlockCacheTest) {
     // is only 1, index block will be purged after data block is inserted.
     iter.reset(c.NewIterator());
     BlockCacheProperties props(options.statistics.get());
-    props.AssertEqual(
-        1 + 1,  // index block miss
-        0,
-        0,  // data block miss
-        0
-    );
+    props.AssertEqual(1 + 1,  // index block miss
+                      0, 0,   // data block miss
+                      0);
   }
 
   {
@@ -1203,12 +1201,8 @@ TEST(BlockBasedTableTest, BlockCacheTest) {
     // block's cache miss.
     iter->SeekToFirst();
     BlockCacheProperties props(options.statistics.get());
-    props.AssertEqual(
-        2,
-        0,
-        0 + 1,  // data block miss
-        0
-    );
+    props.AssertEqual(2, 0, 0 + 1,  // data block miss
+                      0);
   }
 }
 
@@ -1273,18 +1267,19 @@ TEST(PlainTableTest, BasicPlainTableProperties) {
 
   StringSource source(sink.contents(), 72242, true);
 
-  TableProperties props;
+  TableProperties* props = nullptr;
   auto s = ReadTableProperties(&source, sink.contents().size(),
                                kPlainTableMagicNumber, Env::Default(), nullptr,
                                &props);
+  std::unique_ptr<TableProperties> props_guard(props);
   ASSERT_OK(s);
 
-  ASSERT_EQ(0ul, props.index_size);
-  ASSERT_EQ(0ul, props.filter_size);
-  ASSERT_EQ(16ul * 26, props.raw_key_size);
-  ASSERT_EQ(28ul * 26, props.raw_value_size);
-  ASSERT_EQ(26ul, props.num_entries);
-  ASSERT_EQ(1ul, props.num_data_blocks);
+  ASSERT_EQ(0ul, props->index_size);
+  ASSERT_EQ(0ul, props->filter_size);
+  ASSERT_EQ(16ul * 26, props->raw_key_size);
+  ASSERT_EQ(28ul * 26, props->raw_value_size);
+  ASSERT_EQ(26ul, props->num_entries);
+  ASSERT_EQ(1ul, props->num_data_blocks);
 }
 
 TEST(GeneralTableTest, ApproximateOffsetOfPlain) {
@@ -1315,7 +1310,6 @@ TEST(GeneralTableTest, ApproximateOffsetOfPlain) {
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("k06"),  510000, 511000));
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("k07"),  510000, 511000));
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("xyz"),  610000, 612000));
-
 }
 
 static void DoCompressionTest(CompressionType comp) {
@@ -1343,27 +1337,43 @@ static void DoCompressionTest(CompressionType comp) {
 }
 
 TEST(GeneralTableTest, ApproximateOffsetOfCompressed) {
-  CompressionType compression_state[2];
-  int valid = 0;
+  std::vector<CompressionType> compression_state;
   if (!SnappyCompressionSupported()) {
     fprintf(stderr, "skipping snappy compression tests\n");
   } else {
-    compression_state[valid] = kSnappyCompression;
-    valid++;
+    compression_state.push_back(kSnappyCompression);
   }
 
   if (!ZlibCompressionSupported()) {
     fprintf(stderr, "skipping zlib compression tests\n");
   } else {
-    compression_state[valid] = kZlibCompression;
-    valid++;
+    compression_state.push_back(kZlibCompression);
   }
 
-  for(int i =0; i < valid; i++)
-  {
-    DoCompressionTest(compression_state[i]);
+  // TODO(kailiu) DoCompressionTest() doesn't work with BZip2.
+  /*
+  if (!BZip2CompressionSupported()) {
+    fprintf(stderr, "skipping bzip2 compression tests\n");
+  } else {
+    compression_state.push_back(kBZip2Compression);
+  }
+  */
+
+  if (!LZ4CompressionSupported()) {
+    fprintf(stderr, "skipping lz4 compression tests\n");
+  } else {
+    compression_state.push_back(kLZ4Compression);
   }
 
+  if (!LZ4HCCompressionSupported()) {
+    fprintf(stderr, "skipping lz4hc compression tests\n");
+  } else {
+    compression_state.push_back(kLZ4HCCompression);
+  }
+
+  for (auto state : compression_state) {
+    DoCompressionTest(state);
+  }
 }
 
 TEST(Harness, Randomized) {
@@ -1374,8 +1384,8 @@ TEST(Harness, Randomized) {
     for (int num_entries = 0; num_entries < 2000;
          num_entries += (num_entries < 50 ? 1 : 200)) {
       if ((num_entries % 10) == 0) {
-        fprintf(stderr, "case %d of %d: num_entries = %d\n",
-                (i + 1), int(args.size()), num_entries);
+        fprintf(stderr, "case %d of %d: num_entries = %d\n", (i + 1),
+                static_cast<int>(args.size()), num_entries);
       }
       for (int e = 0; e < num_entries; e++) {
         std::string v;
