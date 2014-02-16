@@ -140,6 +140,8 @@ class DBImpl : public DB {
     default_interval_to_delete_obsolete_WAL_ = default_interval_to_delete_obsolete_WAL;
   }
 
+  void TEST_GetFilesMetaData(std::vector<std::vector<FileMetaData>>* metadata);
+
   // holds references to memtable, all immutable memtables and version
   struct SuperVersion {
     MemTable* mem;
@@ -512,6 +514,9 @@ class DBImpl : public DB {
   // the InstallSuperVersion() function above. Background threads carry
   // deletion_state which can have new_superversion already allocated.
   void InstallSuperVersion(DeletionState& deletion_state);
+
+  virtual Status GetPropertiesOfAllTables(TablePropertiesCollection* props)
+      override;
 
   // Function that Get and KeyMayExist call with no_io true or false
   // Note: 'value_found' from KeyMayExist propagates here
