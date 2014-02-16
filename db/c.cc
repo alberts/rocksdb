@@ -396,6 +396,11 @@ void rocksdb_writebatch_iterate(
   b->rep.Iterate(&handler);
 }
 
+const char* rocksdb_writebatch_data(rocksdb_writebatch_t* b, size_t* size) {
+  *size = b->rep.GetDataSize();
+  return b->rep.Data().c_str();
+}
+
 rocksdb_options_t* rocksdb_options_create() {
   return new rocksdb_options_t;
 }

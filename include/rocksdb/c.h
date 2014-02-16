@@ -180,6 +180,7 @@ extern void rocksdb_writebatch_iterate(
     void* state,
     void (*put)(void*, const char* k, size_t klen, const char* v, size_t vlen),
     void (*deleted)(void*, const char* k, size_t klen));
+extern const char* rocksdb_writebatch_data(rocksdb_writebatch_t*, size_t *size);
 
 /* Options */
 
