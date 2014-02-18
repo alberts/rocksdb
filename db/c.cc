@@ -359,6 +359,10 @@ void rocksdb_writebatch_clear(rocksdb_writebatch_t* b) {
   b->rep.Clear();
 }
 
+int rocksdb_writebatch_count(rocksdb_writebatch_t* b) {
+  return b->rep.Count();
+}
+
 void rocksdb_writebatch_put(
     rocksdb_writebatch_t* b,
     const char* key, size_t klen,
