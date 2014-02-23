@@ -71,6 +71,7 @@ typedef struct rocksdb_writablefile_t  rocksdb_writablefile_t;
 typedef struct rocksdb_writebatch_t    rocksdb_writebatch_t;
 typedef struct rocksdb_writeoptions_t  rocksdb_writeoptions_t;
 typedef struct rocksdb_universal_compaction_options_t rocksdb_universal_compaction_options_t;
+typedef struct rocksdb_livefiles_t     rocksdb_livefiles_t;
 
 /* DB operations */
 
@@ -137,6 +138,9 @@ extern void rocksdb_compact_range(
     rocksdb_t* db,
     const char* start_key, size_t start_key_len,
     const char* limit_key, size_t limit_key_len);
+
+extern const rocksdb_livefiles_t* rocksdb_livefiles(
+    rocksdb_t *db);
 
 /* Management operations */
 
@@ -349,6 +353,28 @@ extern void rocksdb_universal_compaction_options_set_stop_style(
   rocksdb_universal_compaction_options_t*, int);
 extern void rocksdb_universal_compaction_options_destroy(
   rocksdb_universal_compaction_options_t*);
+
+extern int rocksdb_livefiles_count(
+  const rocksdb_livefiles_t*);
+extern const char* rocksdb_livefiles_name(
+  const rocksdb_livefiles_t*,
+  int index);
+extern int rocksdb_livefiles_level(
+  const rocksdb_livefiles_t*,
+  int index);
+extern size_t rocksdb_livefiles_size(
+  const rocksdb_livefiles_t*,
+  int index);
+extern const char* rocksdb_livefiles_smallestkey(
+  const rocksdb_livefiles_t*,
+  int index,
+  size_t* size);
+extern const char* rocksdb_livefiles_largestkey(
+  const rocksdb_livefiles_t*,
+  int index,
+  size_t* size);
+extern void rocksdb_livefiles_destroy(
+  const rocksdb_livefiles_t*);
 
 #ifdef __cplusplus
 }  /* end extern "C" */
