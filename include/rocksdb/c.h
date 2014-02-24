@@ -139,8 +139,12 @@ extern void rocksdb_compact_range(
     const char* start_key, size_t start_key_len,
     const char* limit_key, size_t limit_key_len);
 
+extern void rocksdb_delete_file(
+    rocksdb_t* db,
+    const char* name);
+
 extern const rocksdb_livefiles_t* rocksdb_livefiles(
-    rocksdb_t *db);
+    rocksdb_t* db);
 
 /* Management operations */
 
